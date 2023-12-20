@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutterfirebaseapp/BottomNavigation.dart';
@@ -13,11 +14,14 @@ class EditProfile extends StatefulWidget {
   State<EditProfile> createState() => _EditProfileState();
 }
 
-
 class _EditProfileState extends State<EditProfile> {
   User? _user;
   File? _image;
   final picker = ImagePicker();
+  TextEditingController _emailController = TextEditingController();
+  TextEditingController _nameController = TextEditingController();
+  TextEditingController _phoneController = TextEditingController();
+  TextEditingController _addressController = TextEditingController();
 
   @override
   void initState() {
@@ -25,13 +29,38 @@ class _EditProfileState extends State<EditProfile> {
     FirebaseAuth.instance.authStateChanges().listen((event) {
       setState(() {
         _user = event;
+        if (_user != null) {
+          _fetchUserData();
+        }
       });
     });
   }
 
-  Future getImageGallery() async {
-    final pickedFile =
-    await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+  Future<void> _fetchUserData() async {
+    try {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_user!.uid)
+          .get();
+
+      if (userDoc.exists) {
+        setState(() {
+          _emailController.text = userDoc['email'] ?? '';
+          _nameController.text = userDoc['name'] ?? '';
+          _phoneController.text = userDoc['phone'] ?? '';
+          _addressController.text = userDoc['address'] ?? '';
+        });
+      }
+    } catch (e) {
+      print("Error fetching user data: $e");
+    }
+  }
+
+  Future<void> getImageGallery() async {
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
     setState(() {
       if (pickedFile != null) {
         _image = File(pickedFile.path);
@@ -40,9 +69,12 @@ class _EditProfileState extends State<EditProfile> {
       }
     });
   }
-  Future getImageCamera() async {
-    final pickedFile =
-    await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+
+  Future<void> getImageCamera() async {
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
     setState(() {
       if (pickedFile != null) {
         _image = File(pickedFile.path);
@@ -56,16 +88,29 @@ class _EditProfileState extends State<EditProfile> {
     if (_user != null) {
       try {
         if (_image != null) {
-          // Upload the image to Firebase Storage
           await _uploadImageToFirebaseStorage();
 
-          // Get the download URL of the uploaded image
           String imageUrl = await FirebaseStorage.instance
               .ref()
               .child("user_images/${_user!.uid}")
               .getDownloadURL();
-          await _user!.updatePhotoURL(imageUrl);
+
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(_user!.uid)
+              .update({'photoURL': imageUrl});
         }
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_user!.uid)
+            .update({
+          'email': _emailController.text,
+          'name': _nameController.text,
+          'phone': _phoneController.text,
+          'address': _addressController.text,
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Profile updated successfully!"),
@@ -96,6 +141,7 @@ class _EditProfileState extends State<EditProfile> {
       }
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,7 +159,7 @@ class _EditProfileState extends State<EditProfile> {
                   onTap: () {
                     getImageGallery();
                   },
-                  onDoubleTap: (){
+                  onDoubleTap: () {
                     getImageCamera();
                   },
                   child: Container(
@@ -138,14 +184,45 @@ class _EditProfileState extends State<EditProfile> {
               ),
             if (_user != null && _user!.email != null)
               Container(
-                margin: const EdgeInsets.fromLTRB(15,100,15,15),
+                margin: const EdgeInsets.fromLTRB(15, 15, 15, 15),
                 child: TextField(
+                  controller: _emailController,
                   onChanged: (newEmail) {},
                   decoration: InputDecoration(
                     hintText: _user!.email!,
                   ),
                 ),
               ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(15, 15, 15, 15),
+              child: TextField(
+                controller: _nameController,
+                onChanged: (newName) {},
+                decoration: InputDecoration(
+                  hintText: "Name",
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(15, 15, 15, 15),
+              child: TextField(
+                controller: _phoneController,
+                onChanged: (newPhone) {},
+                decoration: InputDecoration(
+                  hintText: "Phone",
+                ),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.fromLTRB(15, 15, 15, 15),
+              child: TextField(
+                controller: _addressController,
+                onChanged: (newAddress) {},
+                decoration: InputDecoration(
+                  hintText: "Address",
+                ),
+              ),
+            ),
             const SizedBox(
               height: 20,
             ),
@@ -157,7 +234,9 @@ class _EditProfileState extends State<EditProfile> {
                   await _updateUserProfile();
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => const BottomNavigation()),
+                    MaterialPageRoute(
+                      builder: (context) => const BottomNavigation(),
+                    ),
                   );
                 },
                 style: ElevatedButton.styleFrom(
@@ -170,7 +249,6 @@ class _EditProfileState extends State<EditProfile> {
                 ),
               ),
             )
-
           ],
         ),
       ),
